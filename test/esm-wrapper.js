@@ -1,7 +1,7 @@
 'use strict'
-const { nodeMajor, nodeMinor } = require('../lib/core/util')
+const semver = require('semver')
 
-if (!((nodeMajor > 14 || (nodeMajor === 14 && nodeMajor > 13)) || (nodeMajor === 12 && nodeMinor > 20))) {
+if (!semver.satisfies(process.version, '>= v14.13.0 || ^12.20.0')) {
   require('tap') // shows skipped
 } else {
   ;(async () => {

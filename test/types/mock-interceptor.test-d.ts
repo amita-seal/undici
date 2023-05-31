@@ -1,18 +1,12 @@
 import { expectAssignable } from 'tsd'
-import { MockAgent, MockPool, BodyInit, Dispatcher } from '../..'
+import { MockAgent, MockPool } from '../..'
 import { MockInterceptor, MockScope } from '../../types/mock-interceptor'
-
-declare const mockResponseCallbackOptions: MockInterceptor.MockResponseCallbackOptions;
-
-expectAssignable<BodyInit | Dispatcher.DispatchOptions['body']>(mockResponseCallbackOptions.body)
 
 {
   const mockPool: MockPool = new MockAgent().get('')
   const mockInterceptor = mockPool.intercept({ path: '', method: 'GET' })
-  const mockInterceptorDefaultMethod = mockPool.intercept({ path: '' })
 
   // reply
-  expectAssignable<MockScope>(mockInterceptor.reply(200))
   expectAssignable<MockScope>(mockInterceptor.reply(200, ''))
   expectAssignable<MockScope>(mockInterceptor.reply(200, Buffer))
   expectAssignable<MockScope>(mockInterceptor.reply(200, {}))
@@ -29,17 +23,13 @@ expectAssignable<BodyInit | Dispatcher.DispatchOptions['body']>(mockResponseCall
   expectAssignable<MockScope>(mockInterceptor.reply(() => ({ statusCode: 200, data: { foo: 'bar' }, responseOptions: {
     headers: { foo: 'bar' }
   }})))
-  expectAssignable<MockScope>(mockInterceptor.reply((options) => {
+  expectAssignable<MockScope>(mockInterceptor.reply((options) => { 
     expectAssignable<MockInterceptor.MockResponseCallbackOptions>(options);
     return { statusCode: 200, data: { foo: 'bar'}
   }}))
   expectAssignable<MockScope>(mockInterceptor.reply(() => ({ statusCode: 200, data: { foo: 'bar' }, responseOptions: {
     trailers: { foo: 'bar' }
   }})))
-  mockInterceptor.reply((options) => {
-    expectAssignable<MockInterceptor.MockResponseCallbackOptions['headers']>(options.headers);
-    return { statusCode: 200, data: { foo: 'bar' } }
-  })
 
   // replyWithError
   class CustomError extends Error {
@@ -50,7 +40,7 @@ expectAssignable<BodyInit | Dispatcher.DispatchOptions['body']>(mockResponseCall
 
   // defaultReplyHeaders
   expectAssignable<MockInterceptor>(mockInterceptor.defaultReplyHeaders({ foo: 'bar' }))
-
+  
   // defaultReplyTrailers
   expectAssignable<MockInterceptor>(mockInterceptor.defaultReplyTrailers({ foo: 'bar' }))
 
@@ -60,7 +50,7 @@ expectAssignable<BodyInit | Dispatcher.DispatchOptions['body']>(mockResponseCall
 
 {
   const mockPool: MockPool = new MockAgent().get('')
-  const mockScope = mockPool.intercept({ path: '', method: 'GET' }).reply(200)
+  const mockScope = mockPool.intercept({ path: '', method: 'GET' }).reply(200, '')
 
   // delay
   expectAssignable<MockScope>(mockScope.delay(1))

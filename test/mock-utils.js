@@ -1,14 +1,11 @@
 'use strict'
 
 const { test } = require('tap')
-const { nodeMajor } = require('../lib/core/util')
 const { MockNotMatchedError } = require('../lib/mock/mock-errors')
 const {
   deleteMockDispatch,
   getMockDispatch,
-  getResponseData,
-  getStatusText,
-  getHeaderByName
+  getResponseData
 } = require('../lib/mock/mock-utils')
 
 test('deleteMockDispatch - should do nothing if not able to find mock dispatch', (t) => {
@@ -111,50 +108,4 @@ test('getResponseData', (t) => {
     const responseData = getResponseData(Buffer.from('test'))
     t.ok(Buffer.isBuffer(responseData))
   })
-})
-
-test('getStatusText', (t) => {
-  for (const statusCode of [
-    100, 101, 102, 103, 200, 201, 202, 203,
-    204, 205, 206, 207, 208, 226, 300, 301,
-    302, 303, 304, 305, 306, 307, 308, 400,
-    401, 402, 403, 404, 405, 406, 407, 408,
-    409, 410, 411, 412, 413, 414, 415, 416,
-    417, 418, 421, 422, 423, 424, 425, 426,
-    428, 429, 431, 451, 500, 501, 502, 503,
-    504, 505, 506, 507, 508, 510, 511
-  ]) {
-    t.ok(getStatusText(statusCode))
-  }
-
-  t.equal(getStatusText(420), 'unknown')
-
-  t.end()
-})
-
-test('getHeaderByName', (t) => {
-  const headersRecord = {
-    key: 'value'
-  }
-
-  t.equal(getHeaderByName(headersRecord, 'key'), 'value')
-  t.equal(getHeaderByName(headersRecord, 'anotherKey'), undefined)
-
-  const headersArray = ['key', 'value']
-
-  t.equal(getHeaderByName(headersArray, 'key'), 'value')
-  t.equal(getHeaderByName(headersArray, 'anotherKey'), undefined)
-
-  if (nodeMajor >= 16) {
-    const { Headers } = require('../index')
-
-    const headers = new Headers([
-      ['key', 'value']
-    ])
-
-    t.equal(getHeaderByName(headers, 'key'), 'value')
-    t.equal(getHeaderByName(headers, 'anotherKey'), null)
-  }
-
-  t.end()
 })

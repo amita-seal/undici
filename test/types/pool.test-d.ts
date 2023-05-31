@@ -1,5 +1,5 @@
 import { Duplex, Readable, Writable } from 'stream'
-import { expectAssignable, expectType } from 'tsd'
+import { expectAssignable } from 'tsd'
 import { Dispatcher, Pool, Client } from '../..'
 import { URL } from 'url'
 
@@ -16,7 +16,6 @@ expectAssignable<Pool>(new Pool('', { connections: 1 }))
   // properties
   expectAssignable<boolean>(pool.closed)
   expectAssignable<boolean>(pool.destroyed)
-  expectAssignable<Pool.PoolStats>(pool.stats)
 
   // request
   expectAssignable<Promise<Dispatcher.ResponseData>>(pool.request({ origin: '', path: '', method: 'GET' }))
@@ -101,12 +100,4 @@ expectAssignable<Pool>(new Pool('', { connections: 1 }))
   expectAssignable<void>(pool.destroy(() => {}))
   expectAssignable<void>(pool.destroy(new Error(), () => {}))
   expectAssignable<void>(pool.destroy(null, () => {}))
-
-  // stats
-  expectType<number>(pool.stats.connected)
-  expectType<number>(pool.stats.free)
-  expectType<number>(pool.stats.pending)
-  expectType<number>(pool.stats.queued)
-  expectType<number>(pool.stats.running)
-  expectType<number>(pool.stats.size)
 }

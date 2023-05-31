@@ -9,29 +9,11 @@ on: [push, pull_request]
 jobs:
   build:
     name: Test
-    uses: pkgjs/action/.github/workflows/node-test.yaml@v0.1.7
+
+    uses: pkgjs/action/.github/workflows/node-test.yaml@v0.1
     with:
       runs-on: ubuntu-latest, windows-latest
       test-command: npm run coverage:ci
-      timeout-minutes: 15
       post-test-steps: |
         - name: Coverage Report
-          uses: codecov/codecov-action@v3
-      include: |
-        - runs-on: ubuntu-latest
-          node-version: 16.8
-      exclude: |
-        - runs-on: windows-latest
-          node-version: 16
-  automerge:
-    if: >
-      github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      contents: write
-    steps:
-    - uses: fastify/github-action-merge-dependabot@415548af92cebc9895bff7b30e3e89d8970a2576 # v3.7.0
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
+          uses: codecov/codecov-action@v2

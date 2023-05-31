@@ -2,7 +2,6 @@
 
 const { test } = require('tap')
 const { Client, errors } = require('..')
-const timers = require('../lib/timers')
 const { createServer } = require('http')
 const FakeTimers = require('@sinonjs/fake-timers')
 
@@ -64,12 +63,6 @@ test('Disable socket timeout', (t) => {
   const server = createServer()
   const clock = FakeTimers.install()
   t.teardown(clock.uninstall.bind(clock))
-
-  const orgTimers = { ...timers }
-  Object.assign(timers, { setTimeout, clearTimeout })
-  t.teardown(() => {
-    Object.assign(timers, orgTimers)
-  })
 
   server.once('request', (req, res) => {
     setTimeout(() => {

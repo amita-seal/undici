@@ -3,9 +3,8 @@
 const { test } = require('tap')
 const { createServer } = require('http')
 const { promisify } = require('util')
-const { MockAgent, MockPool, getGlobalDispatcher, setGlobalDispatcher, request } = require('..')
+const { MockAgent, MockPool, setGlobalDispatcher, request } = require('..')
 const { kUrl } = require('../lib/core/symbols')
-const { nodeMajor } = require('../lib/core/util')
 const { kDispatches } = require('../lib/mock/mock-symbols')
 const { InvalidArgumentError } = require('../lib/core/errors')
 const { MockInterceptor } = require('../lib/mock/mock-interceptor')
@@ -148,13 +147,14 @@ test('MockPool - intercept validation', (t) => {
     t.throws(() => mockPool.intercept({}), new InvalidArgumentError('opts.path must be defined'))
   })
 
-  t.test('it should default to GET if no method specified in the intercept', t => {
+  t.test('it should error if no method specified in the intercept', t => {
     t.plan(1)
     const mockAgent = new MockAgent()
     t.teardown(mockAgent.close.bind(mockAgent))
 
     const mockPool = mockAgent.get('http://localhost:9999')
-    t.doesNotThrow(() => mockPool.intercept({ path: '/foo' }))
+
+    t.throws(() => mockPool.intercept({ path: '/foo' }), new InvalidArgumentError('opts.method must be defined'))
   })
 })
 
@@ -300,70 +300,4 @@ test('MockPool - basic intercept with MockPool.request', async (t) => {
   t.same(jsonResponse, {
     foo: 'bar'
   })
-})
-
-// https://github.com/nodejs/undici/issues/1546
-test('MockPool - correct errors when consuming invalid JSON body', async (t) => {
-  const oldDispatcher = getGlobalDispatcher()
-
-  const mockAgent = new MockAgent()
-  mockAgent.disableNetConnect()
-  setGlobalDispatcher(mockAgent)
-
-  t.teardown(() => setGlobalDispatcher(oldDispatcher))
-
-  const mockPool = mockAgent.get('https://google.com')
-  mockPool.intercept({
-    path: 'https://google.com'
-  }).reply(200, 'it\'s just a text')
-
-  const { body } = await request('https://google.com')
-  await t.rejects(body.json(), SyntaxError)
-
-  t.end()
-})
-
-test('MockPool - allows matching headers in fetch', { skip: nodeMajor < 16 }, async (t) => {
-  const { fetch } = require('../index')
-
-  const oldDispatcher = getGlobalDispatcher()
-
-  const baseUrl = 'http://localhost:9999'
-  const mockAgent = new MockAgent()
-  mockAgent.disableNetConnect()
-  setGlobalDispatcher(mockAgent)
-
-  t.teardown(async () => {
-    await mockAgent.close()
-    setGlobalDispatcher(oldDispatcher)
-  })
-
-  const pool = mockAgent.get(baseUrl)
-  pool.intercept({
-    path: '/foo',
-    method: 'GET',
-    headers: {
-      accept: 'application/json'
-    }
-  }).reply(200, { ok: 1 }).times(3)
-
-  await t.resolves(
-    fetch(`${baseUrl}/foo`, {
-      headers: {
-        accept: 'application/json'
-      }
-    })
-  )
-
-  // no 'accept: application/json' header sent, not matched
-  await t.rejects(fetch(`${baseUrl}/foo`))
-
-  // not 'accept: application/json', not matched
-  await t.rejects(fetch(`${baseUrl}/foo`), {
-    headers: {
-      accept: 'text/plain'
-    }
-  }, TypeError)
-
-  t.end()
 })

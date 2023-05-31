@@ -4,10 +4,11 @@ const { readFileSync } = require('fs')
 const { join } = require('path')
 const https = require('https')
 const crypto = require('crypto')
-const { test, teardown } = require('tap')
+const { test } = require('tap')
 const { Client, Pool } = require('..')
 const { kSocket } = require('../lib/core/symbols')
-const { nodeMajor } = require('../lib/core/util')
+
+const nodeMajor = Number(process.versions.node.split('.')[0])
 
 const options = {
   key: readFileSync(join(__dirname, 'fixtures', 'key.pem'), 'utf8'),
@@ -181,5 +182,3 @@ test('A pool should be able to reuse TLS sessions between clients', {
 
   t.end()
 })
-
-teardown(() => process.exit())

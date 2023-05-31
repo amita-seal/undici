@@ -1,14 +1,23 @@
 'use strict'
 
+const util = require('util')
 const tap = require('tap')
-const { Headers, fill } = require('../../lib/fetch/headers')
+const {
+  Headers,
+  binarySearch,
+  normalizeAndValidateHeaderName,
+  normalizeAndValidateHeaderValue,
+  fill
+} = require('../../lib/fetch/headers')
+const { kHeadersList } = require('../../lib/core/symbols')
 const { kGuard } = require('../../lib/fetch/symbols')
-const { once } = require('events')
-const { fetch } = require('../..')
-const { createServer } = require('http')
+const {
+  forbiddenHeaderNames,
+  forbiddenResponseHeaderNames
+} = require('../../lib/fetch/constants')
 
 tap.test('Headers initialization', t => {
-  t.plan(8)
+  t.plan(7)
 
   t.test('allows undefined', t => {
     t.plan(1)
@@ -21,15 +30,9 @@ tap.test('Headers initialization', t => {
 
     t.test('fails on invalid array-based init', t => {
       t.plan(3)
-      t.throws(
-        () => new Headers([['undici', 'fetch'], ['fetch']]),
-        TypeError('Headers constructor: expected name/value pair to be length 2, found 1.')
-      )
-      t.throws(() => new Headers(['undici', 'fetch', 'fetch']), TypeError)
-      t.throws(
-        () => new Headers([0, 1, 2]),
-        TypeError('Sequence: Value of type Number is not an Object.')
-      )
+      t.throws(() => new Headers([['undici', 'fetch'], ['fetch']]), TypeError())
+      t.throws(() => new Headers(['undici', 'fetch', 'fetch']), TypeError())
+      t.throws(() => new Headers([0, 1, 2]), TypeError())
     })
 
     t.test('allows even length init', t => {
@@ -41,10 +44,7 @@ tap.test('Headers initialization', t => {
     t.test('fails for event flattened init', t => {
       t.plan(1)
       const init = ['undici', 'fetch', 'fetch', 'undici']
-      t.throws(
-        () => new Headers(init),
-        TypeError('Sequence: Value of type String is not an Object.')
-      )
+      t.throws(() => new Headers(init), TypeError())
     })
   })
 
@@ -66,27 +66,17 @@ tap.test('Headers initialization', t => {
     /* eslint-enable no-new-wrappers */
   })
 
-  t.test('fails if primitive is passed', t => {
-    t.plan(2)
-    const expectedTypeError = TypeError
+  t.test('fails if function or primitive is passed', t => {
+    t.plan(4)
+    const expectedTypeError = TypeError("Failed to construct 'Headers': The provided value is not of type '(record<ByteString, ByteString> or sequence<sequence<ByteString>>")
+    t.throws(() => new Headers(Function), expectedTypeError)
+    t.throws(() => new Headers(function () {}), expectedTypeError)
     t.throws(() => new Headers(1), expectedTypeError)
     t.throws(() => new Headers('1'), expectedTypeError)
   })
 
-  t.test('allows some weird stuff (because of webidl)', t => {
-    t.doesNotThrow(() => {
-      new Headers(function () {}) // eslint-disable-line no-new
-    })
-
-    t.doesNotThrow(() => {
-      new Headers(Function) // eslint-disable-line no-new
-    })
-
-    t.end()
-  })
-
   t.test('allows a myriad of header values to be passed', t => {
-    t.plan(4)
+    t.plan(5)
 
     // Headers constructor uses Headers.append
 
@@ -97,6 +87,9 @@ tap.test('Headers initialization', t => {
     t.doesNotThrow(() => new Headers([
       ['key', null]
     ]), 'allows null values')
+    t.doesNotThrow(() => new Headers([
+      ['key', Symbol('undici-fetch')]
+    ]), 'allows Symbol values')
     t.throws(() => new Headers([
       ['key']
     ]), 'throws when 2 arguments are not passed')
@@ -108,12 +101,11 @@ tap.test('Headers initialization', t => {
   t.test('accepts headers as objects with array values', t => {
     t.plan(1)
     const headers = new Headers({
-      c: '5',
+      a: ['1', '2'],
       b: ['3', '4'],
-      a: ['1', '2']
+      c: '5'
     })
-
-    t.same([...headers.entries()], [
+    t.same(headers.entries(), [
       ['a', '1,2'],
       ['b', '3,4'],
       ['c', '5']
@@ -277,13 +269,14 @@ tap.test('Headers set', t => {
   })
 
   t.test('allows setting a myriad of values', t => {
-    t.plan(4)
+    t.plan(5)
     const headers = new Headers()
 
     t.doesNotThrow(() => headers.set('a', ['b', 'c']), 'sets array values properly')
     t.doesNotThrow(() => headers.set('b', null), 'allows setting null values')
     t.throws(() => headers.set('c'), 'throws when 2 arguments are not passed')
     t.doesNotThrow(() => headers.set('c', 'd', 'e'), 'ignores extra arguments')
+    t.doesNotThrow(() => headers.set('f', Symbol('g'), 'allows Symbol value'))
   })
 
   t.test('throws on invalid entry', t => {
@@ -296,43 +289,8 @@ tap.test('Headers set', t => {
   })
 })
 
-tap.test('Headers forEach', t => {
-  const headers = new Headers([['a', 'b'], ['c', 'd']])
-
-  t.test('standard', t => {
-    t.equal(typeof headers.forEach, 'function')
-
-    headers.forEach((value, key, headerInstance) => {
-      t.ok(value === 'b' || value === 'd')
-      t.ok(key === 'a' || key === 'c')
-      t.equal(headers, headerInstance)
-    })
-
-    t.end()
-  })
-
-  t.test('when no thisArg is set, it is globalThis', (t) => {
-    headers.forEach(function () {
-      t.equal(this, globalThis)
-    })
-
-    t.end()
-  })
-
-  t.test('with thisArg', t => {
-    const thisArg = { a: Math.random() }
-    headers.forEach(function () {
-      t.equal(this, thisArg)
-    }, thisArg)
-
-    t.end()
-  })
-
-  t.end()
-})
-
 tap.test('Headers as Iterable', t => {
-  t.plan(7)
+  t.plan(8)
 
   t.test('should freeze values while iterating', t => {
     t.plan(1)
@@ -341,8 +299,8 @@ tap.test('Headers as Iterable', t => {
       ['bar', '456']
     ]
     const expected = [
-      ['foo', '123'],
-      ['x-x-bar', '456']
+      ['x-bar', '456'],
+      ['x-foo', '123']
     ]
     const headers = new Headers(init)
     for (const [key, val] of headers) {
@@ -352,8 +310,30 @@ tap.test('Headers as Iterable', t => {
     t.strictSame([...headers], expected)
   })
 
+  t.test('prevent infinite, continuous iteration', t => {
+    t.plan(2)
+
+    const headers = new Headers({
+      z: 1,
+      y: 2,
+      x: 3
+    })
+
+    const order = []
+    for (const [key] of headers) {
+      order.push(key)
+      headers.set(key + key, 1)
+    }
+
+    t.strictSame(order, ['x', 'y', 'z'])
+    t.strictSame(
+      [...headers.keys()],
+      ['x', 'xx', 'y', 'yy', 'z', 'zz']
+    )
+  })
+
   t.test('returns combined and sorted entries using .forEach()', t => {
-    t.plan(8)
+    t.plan(12)
     const init = [
       ['a', '1'],
       ['b', '2'],
@@ -372,6 +352,7 @@ tap.test('Headers as Iterable', t => {
     let i = 0
     headers.forEach(function (value, key, _headers) {
       t.strictSame(expected[i++], [key, value])
+      t.equal(headers, _headers)
       t.equal(this, that)
     }, that)
   })
@@ -464,21 +445,67 @@ tap.test('Headers as Iterable', t => {
     headers.append('c', '7')
     headers.append('abc', '8')
 
-    const expected = [...new Map([
-      ['a', '1'],
-      ['abc', '8'],
-      ['b', '2'],
-      ['c', '3, 7'],
-      ['d', '4'],
-      ['e', '5'],
-      ['f', '6']
-    ])]
+    const expected = [
+      'a', '1',
+      'abc', '8',
+      'b', '2',
+      'c', '3, 7',
+      'd', '4',
+      'e', '5',
+      'f', '6'
+    ]
 
-    t.same([...headers], expected)
+    t.same(headers[kHeadersList], expected)
+  })
+})
+
+tap.test('binary search', t => {
+  //           0   1   2   3   4   5   6   7
+  const l1 = ['b', 1, 'c', 2, 'd', 3, 'f', 4]
+  //           0   1   2   3   4   5   6   7   8   9
+  const l2 = ['b', 1, 'c', 2, 'd', 3, 'e', 4, 'g', 5]
+  //           0   1   2   3    4    5   6   7
+  const l3 = ['a', 1, 'b', 2, 'bcd', 3, 'c', 4]
+  //           0   1   2   3   4   5    6    7   8   9
+  const l4 = ['a', 1, 'b', 2, 'c', 3, 'cde', 4, 'f', 5]
+
+  const tests = [
+    { input: [l1, 'c'], expected: 2, message: 'find item in n=even array' },
+    { input: [l1, 'f'], expected: 6, message: 'find item at end of n=even array' },
+    { input: [l1, 'b'], expected: 0, message: 'find item at beg of n=even array' },
+    { input: [l1, 'e'], expected: 6, message: 'find new item position in n=even array' },
+    { input: [l1, 'g'], expected: 8, message: 'find new item position at end of n=even array' },
+    { input: [l1, 'a'], expected: 0, message: 'find new item position at beg of n=even array' },
+    { input: [l2, 'c'], expected: 2, message: 'find item in n=odd array' },
+    { input: [l2, 'g'], expected: 8, message: 'find item at end of n=odd array' },
+    { input: [l2, 'b'], expected: 0, message: 'find item at beg of n=odd array' },
+    { input: [l2, 'f'], expected: 8, message: 'find new item position in n=odd array' },
+    { input: [l2, 'h'], expected: 10, message: 'find new item position at end of n=odd array' },
+    { input: [l2, 'a'], expected: 0, message: 'find new item position at beg of n=odd array' },
+    { input: [l3, 'b'], expected: 2, message: 'find item with similarity in n=odd array' },
+    { input: [l3, 'bcd'], expected: 4, message: 'find item with similarity in n=odd array' },
+    { input: [l4, 'c'], expected: 4, message: 'find item with similarity in n=odd array' },
+    { input: [l4, 'cde'], expected: 6, message: 'find item with similarity in n=odd array' }
+  ]
+
+  t.plan(tests.length)
+
+  tests.forEach(({ input: [list, target], expected, message }) => {
+    t.equal(expected, binarySearch(list, target), message)
   })
 })
 
 tap.test('arg validation', (t) => {
+  // normalizeAndValidateHeaderName
+  t.throws(() => {
+    normalizeAndValidateHeaderName()
+  }, TypeError)
+
+  // normalizeAndValidateHeaderValue
+  t.throws(() => {
+    normalizeAndValidateHeaderValue()
+  }, TypeError)
+
   // fill
   t.throws(() => {
     fill({}, 0)
@@ -493,14 +520,14 @@ tap.test('arg validation', (t) => {
   }, TypeError)
 
   // get [Symbol.toStringTag]
-  t.doesNotThrow(() => {
+  t.throws(() => {
     Object.prototype.toString.call(Headers.prototype)
-  })
+  }, TypeError)
 
   // toString
-  t.doesNotThrow(() => {
+  t.throws(() => {
     Headers.prototype.toString.call(null)
-  })
+  }, TypeError)
 
   // append
   t.throws(() => {
@@ -561,42 +588,6 @@ tap.test('arg validation', (t) => {
   t.end()
 })
 
-tap.test('function signature verification', (t) => {
-  t.test('function length', (t) => {
-    t.equal(Headers.prototype.append.length, 2)
-    t.equal(Headers.prototype.constructor.length, 0)
-    t.equal(Headers.prototype.delete.length, 1)
-    t.equal(Headers.prototype.entries.length, 0)
-    t.equal(Headers.prototype.forEach.length, 1)
-    t.equal(Headers.prototype.get.length, 1)
-    t.equal(Headers.prototype.has.length, 1)
-    t.equal(Headers.prototype.keys.length, 0)
-    t.equal(Headers.prototype.set.length, 2)
-    t.equal(Headers.prototype.values.length, 0)
-    t.equal(Headers.prototype[Symbol.iterator].length, 0)
-    t.equal(Headers.prototype.toString.length, 0)
-
-    t.end()
-  })
-
-  t.test('function equality', (t) => {
-    t.equal(Headers.prototype.entries, Headers.prototype[Symbol.iterator])
-    t.equal(Headers.prototype.toString, Object.prototype.toString)
-
-    t.end()
-  })
-
-  t.test('toString and Symbol.toStringTag', (t) => {
-    t.equal(Object.prototype.toString.call(Headers.prototype), '[object Headers]')
-    t.equal(Headers.prototype[Symbol.toStringTag], 'Headers')
-    t.equal(Headers.prototype.toString.call(null), '[object Null]')
-
-    t.end()
-  })
-
-  t.end()
-})
-
 tap.test('various init paths of Headers', (t) => {
   const h1 = new Headers()
   const h2 = new Headers({})
@@ -605,6 +596,14 @@ tap.test('various init paths of Headers', (t) => {
   t.equal([...h2.entries()].length, 0)
   t.equal([...h3.entries()].length, 0)
 
+  t.end()
+})
+
+tap.test('node inspect', (t) => {
+  const headers = new Headers()
+  headers.set('k1', 'v1')
+  headers.set('k2', 'v2')
+  t.equal(util.inspect(headers), "HeadersList(4) [ 'k1', 'v1', 'k2', 'v2' ]")
   t.end()
 })
 
@@ -637,80 +636,41 @@ tap.test('request-no-cors guard', (t) => {
   t.end()
 })
 
-tap.test('invalid headers', (t) => {
-  for (const byte of ['\r', '\n', '\t', ' ', String.fromCharCode(128), '']) {
-    t.throws(() => {
-      new Headers().set(byte, 'test')
-    }, TypeError, 'invalid header name')
+tap.test('request guard', (t) => {
+  const headers = new Headers(forbiddenHeaderNames.map(k => [k, 'v']))
+  headers[kGuard] = 'request'
+  headers.set('set-cookie', 'val')
+
+  for (const name of forbiddenHeaderNames) {
+    headers.set(name, '1')
+    headers.append(name, '1')
+    t.equal(headers.get(name), 'v')
+    headers.delete(name)
+    t.equal(headers.has(name), true)
   }
 
-  for (const byte of [
-    '\0',
-    '\r',
-    '\n'
-  ]) {
-    t.throws(() => {
-      new Headers().set('a', `a${byte}b`)
-    }, TypeError, 'not allowed at all in header value')
-  }
-
-  t.doesNotThrow(() => {
-    new Headers().set('a', '\r')
-  })
-
-  t.doesNotThrow(() => {
-    new Headers().set('a', '\n')
-  })
-
-  t.throws(() => {
-    new Headers().set('a', Symbol('symbol'))
-  }, TypeError, 'symbols should throw')
+  t.equal(headers.get('set-cookie'), 'val')
+  t.equal(headers.has('set-cookie'), true)
 
   t.end()
 })
 
-tap.test('headers that might cause a ReDoS', (t) => {
-  t.doesNotThrow(() => {
-    // This test will time out if the ReDoS attack is successful.
-    const headers = new Headers()
-    const attack = 'a' + '\t'.repeat(500_000) + '\ta'
-    headers.append('fhqwhgads', attack)
-  })
+tap.test('response guard', (t) => {
+  const headers = new Headers(forbiddenResponseHeaderNames.map(k => [k, 'v']))
+  headers[kGuard] = 'response'
+  headers.set('key', 'val')
+  headers.set('keep-alive', 'val')
 
-  t.end()
-})
+  for (const name of forbiddenResponseHeaderNames) {
+    headers.set(name, '1')
+    headers.append(name, '1')
+    t.equal(headers.get(name), 'v')
+    headers.delete(name)
+    t.equal(headers.has(name), true)
+  }
 
-tap.test('Headers.prototype.getSetCookie', (t) => {
-  t.test('Mutating the returned list does not affect the set-cookie list', (t) => {
-    const h = new Headers([
-      ['set-cookie', 'a=b'],
-      ['set-cookie', 'c=d']
-    ])
-
-    const old = h.getSetCookie()
-    h.getSetCookie().push('oh=no')
-    const now = h.getSetCookie()
-
-    t.same(old, now)
-    t.end()
-  })
-
-  // https://github.com/nodejs/undici/issues/1935
-  t.test('When Headers are cloned, so are the cookies', async (t) => {
-    const server = createServer((req, res) => {
-      res.setHeader('Set-Cookie', 'test=onetwo')
-      res.end('Hello World!')
-    }).listen(0)
-
-    await once(server, 'listening')
-    t.teardown(server.close.bind(server))
-
-    const res = await fetch(`http://localhost:${server.address().port}`)
-    const entries = Object.fromEntries(res.headers.entries())
-
-    t.same(res.headers.getSetCookie(), ['test=onetwo'])
-    t.ok('set-cookie' in entries)
-  })
+  t.equal(headers.get('keep-alive'), 'val')
+  t.equal(headers.has('keep-alive'), true)
 
   t.end()
 })

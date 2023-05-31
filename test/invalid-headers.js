@@ -50,7 +50,7 @@ test('invalid headers', (t) => {
     path: '/',
     method: 'GET',
     headers: {
-      connection: 'asd'
+      connection: 'close'
     }
   }, (err, data) => {
     t.type(err, errors.InvalidArgumentError)

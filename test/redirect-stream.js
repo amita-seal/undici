@@ -7,8 +7,7 @@ const {
   startRedirectingWithBodyServer,
   startRedirectingChainServers,
   startRedirectingWithoutLocationServer,
-  startRedirectingWithAuthorization,
-  startRedirectingWithCookie
+  startRedirectingWithAuthorization
 } = require('./utils/redirecting-servers')
 const { createReadable, createWritable } = require('./utils/stream')
 
@@ -402,22 +401,3 @@ t.test('removes authorization header on third party origin', async t => {
 
   t.equal(body.length, 0)
 })
-
-t.test('removes cookie header on third party origin', async t => {
-  t.plan(1)
-
-  const body = []
-
-  const [server1] = await startRedirectingWithCookie(t, 'a=b')
-  await stream(`http://${server1}`, {
-    maxRedirections: 10,
-    opaque: body,
-    headers: {
-      cookie: 'a=b'
-    }
-  }, ({ statusCode, headers, opaque }) => createWritable(opaque))
-
-  t.equal(body.length, 0)
-})
-
-t.teardown(() => process.exit())

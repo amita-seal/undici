@@ -161,7 +161,7 @@ test('close should still reconnect', (t) => {
     t.ok(!makeRequest())
 
     client.close((err) => {
-      t.error(err)
+      t.equal(err, null)
       t.equal(client.closed, true)
     })
     client.once('connect', () => {
@@ -196,7 +196,7 @@ test('close should call callback once finished', (t) => {
     t.ok(!makeRequest())
 
     client.close((err) => {
-      t.error(err)
+      t.equal(err, null)
       t.equal(client.closed, true)
     })
 

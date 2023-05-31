@@ -1,11 +1,7 @@
-import Agent from './agent'
-import buildConnector from './connector';
-import Client from './client'
-import Dispatcher from './dispatcher'
-import { IncomingHttpHeaders } from './header'
-import Pool from './pool'
+import Agent = require('./agent')
+import Dispatcher = require('./dispatcher')
 
-export default ProxyAgent
+export = ProxyAgent
 
 declare class ProxyAgent extends Dispatcher {
   constructor(options: ProxyAgent.Options | string)
@@ -17,14 +13,5 @@ declare class ProxyAgent extends Dispatcher {
 declare namespace ProxyAgent {
   export interface Options extends Agent.Options {
     uri: string;
-    /**
-     * @deprecated use opts.token
-     */
-    auth?: string;
-    token?: string;
-    headers?: IncomingHttpHeaders;
-    requestTls?: buildConnector.BuildOptions;
-    proxyTls?: buildConnector.BuildOptions;
-    clientFactory?(origin: URL, opts: object): Dispatcher;
   }
 }

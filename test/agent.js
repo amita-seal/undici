@@ -1,6 +1,6 @@
 'use strict'
 
-const { test, teardown } = require('tap')
+const { test } = require('tap')
 const http = require('http')
 const { PassThrough } = require('stream')
 const { kRunning } = require('../lib/core/symbols')
@@ -10,10 +10,8 @@ const {
   request,
   stream,
   pipeline,
-  setGlobalDispatcher,
-  getGlobalDispatcher
+  setGlobalDispatcher
 } = require('../')
-const importFresh = require('import-fresh')
 
 test('setGlobalDispatcher', t => {
   t.plan(2)
@@ -73,7 +71,7 @@ test('agent should call callback after closing internal pools', t => {
             t.fail('second request should not resolve')
           })
           .catch(err => {
-            t.type(err, errors.ClientDestroyedError)
+            t.type(err, errors.ClientClosedError)
           })
       })
     })
@@ -122,7 +120,7 @@ test('agent should close internal pools', t => {
           t.fail('second request should not resolve')
         })
         .catch(err => {
-          t.type(err, errors.ClientDestroyedError)
+          t.type(err, errors.ClientClosedError)
         })
     })
   })
@@ -647,6 +645,34 @@ test('drain', t => {
   })
 })
 
+// Port 80 is no accessible on CI.
+// test('agent works with port 80', t => {
+//   t.plan(1)
+
+//   const server = http.createServer((req, res) => {
+//     res.setHeader('Content-Type', 'text/plain')
+//     res.end()
+//   })
+
+//   t.teardown(server.close.bind(server))
+
+//   server.listen(80, async () => {
+//     const dispatcher = new Agent()
+
+//     const origin = `http://localhost:${server.address().port}`
+
+//     try {
+//       const { body } = await dispatcher.request({ origin, method: 'GET', path: '/' })
+
+//       body.on('end', () => {
+//         t.pass()
+//       }).resume()
+//     } catch (err) {
+//       t.error(err)
+//     }
+//   })
+// })
+
 test('global api', t => {
   t.plan(6 * 2)
 
@@ -698,12 +724,3 @@ test('connect is not valid', t => {
 
   t.throws(() => new Agent({ connect: false }), errors.InvalidArgumentError, 'connect must be a function or an object')
 })
-
-test('the dispatcher is truly global', t => {
-  const agent = getGlobalDispatcher()
-  const undiciFresh = importFresh('../index.js')
-  t.equal(agent, undiciFresh.getGlobalDispatcher())
-  t.end()
-})
-
-teardown(() => process.exit())

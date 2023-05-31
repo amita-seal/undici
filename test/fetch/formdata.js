@@ -1,11 +1,9 @@
 'use strict'
 
 const { test } = require('tap')
-const { FormData, File, Response } = require('../../')
+const { FormData, File } = require('../../')
 const { Blob: ThirdPartyBlob } = require('formdata-node')
 const { Blob } = require('buffer')
-const { isFormDataLike } = require('../../lib/core/util')
-const ThirdPartyFormDataInvalid = require('form-data')
 
 test('arg validation', (t) => {
   const form = new FormData()
@@ -75,24 +73,18 @@ test('arg validation', (t) => {
     Reflect.apply(FormData.prototype[Symbol.iterator], null)
   }, TypeError)
 
-  // toStringTag
-  t.doesNotThrow(() => {
-    FormData.prototype[Symbol.toStringTag].charAt(0)
-  })
-
   t.end()
 })
 
 test('append file', (t) => {
   const form = new FormData()
-  form.set('asd', new File([], 'asd1', { type: 'text/plain' }), 'asd2')
+  form.set('asd', new File([], 'asd1'), 'asd2')
   form.append('asd2', new File([], 'asd1'), 'asd2')
 
   t.equal(form.has('asd'), true)
   t.equal(form.has('asd2'), true)
   t.equal(form.get('asd').name, 'asd2')
   t.equal(form.get('asd2').name, 'asd2')
-  t.equal(form.get('asd').type, 'text/plain')
   form.delete('asd')
   t.equal(form.get('asd'), null)
   t.equal(form.has('asd2'), true)
@@ -103,10 +95,9 @@ test('append file', (t) => {
 
 test('append blob', async (t) => {
   const form = new FormData()
-  form.set('asd', new Blob(['asd1'], { type: 'text/plain' }))
+  form.set('asd', new Blob(['asd1']))
 
   t.equal(form.has('asd'), true)
-  t.equal(form.get('asd').type, 'text/plain')
   t.equal(await form.get('asd').text(), 'asd1')
   form.delete('asd')
   t.equal(form.get('asd'), null)
@@ -116,10 +107,9 @@ test('append blob', async (t) => {
 
 test('append third-party blob', async (t) => {
   const form = new FormData()
-  form.set('asd', new ThirdPartyBlob(['asd1'], { type: 'text/plain' }))
+  form.set('asd', new ThirdPartyBlob(['asd1']))
 
   t.equal(form.has('asd'), true)
-  t.equal(form.get('asd').type, 'text/plain')
   t.equal(await form.get('asd').text(), 'asd1')
   form.delete('asd')
   t.equal(form.get('asd'), null)
@@ -215,187 +205,8 @@ test('formData.values', (t) => {
   })
 })
 
-test('formData forEach', (t) => {
-  t.test('invalid arguments', (t) => {
-    t.throws(() => {
-      FormData.prototype.forEach.call({})
-    }, TypeError('Illegal invocation'))
-
-    t.throws(() => {
-      const fd = new FormData()
-
-      fd.forEach({})
-    }, TypeError)
-
-    t.end()
-  })
-
-  t.test('with a callback', (t) => {
-    const fd = new FormData()
-
-    fd.set('a', 'b')
-    fd.set('c', 'd')
-
-    let i = 0
-    fd.forEach((value, key, self) => {
-      if (i++ === 0) {
-        t.equal(value, 'b')
-        t.equal(key, 'a')
-      } else {
-        t.equal(value, 'd')
-        t.equal(key, 'c')
-      }
-
-      t.equal(fd, self)
-    })
-
-    t.end()
-  })
-
-  t.test('with a thisArg', (t) => {
-    const fd = new FormData()
-    fd.set('b', 'a')
-
-    fd.forEach(function (value, key, self) {
-      t.equal(this, globalThis)
-      t.equal(fd, self)
-      t.equal(key, 'b')
-      t.equal(value, 'a')
-    })
-
-    const thisArg = Symbol('thisArg')
-    fd.forEach(function () {
-      t.equal(this, thisArg)
-    }, thisArg)
-
-    t.end()
-  })
-
-  t.end()
-})
-
 test('formData toStringTag', (t) => {
   const form = new FormData()
   t.equal(form[Symbol.toStringTag], 'FormData')
-  t.equal(FormData.prototype[Symbol.toStringTag], 'FormData')
   t.end()
-})
-
-test('formData.constructor.name', (t) => {
-  const form = new FormData()
-  t.equal(form.constructor.name, 'FormData')
-  t.end()
-})
-
-test('formData should be an instance of FormData', (t) => {
-  t.plan(3)
-
-  t.test('Invalid class FormData', (t) => {
-    class FormData {
-      constructor () {
-        this.data = []
-      }
-
-      append (key, value) {
-        this.data.push([key, value])
-      }
-
-      get (key) {
-        return this.data.find(([k]) => k === key)
-      }
-    }
-
-    const form = new FormData()
-    t.equal(isFormDataLike(form), false)
-    t.end()
-  })
-
-  t.test('Invalid function FormData', (t) => {
-    function FormData () {
-      const data = []
-      return {
-        append (key, value) {
-          data.push([key, value])
-        },
-        get (key) {
-          return data.find(([k]) => k === key)
-        }
-      }
-    }
-
-    const form = new FormData()
-    t.equal(isFormDataLike(form), false)
-    t.end()
-  })
-
-  test('Invalid third-party FormData', (t) => {
-    const form = new ThirdPartyFormDataInvalid()
-    t.equal(isFormDataLike(form), false)
-    t.end()
-  })
-
-  t.test('Valid FormData', (t) => {
-    const form = new FormData()
-    t.equal(isFormDataLike(form), true)
-    t.end()
-  })
-})
-
-test('FormData should be compatible with third-party libraries', (t) => {
-  t.plan(1)
-
-  class FormData {
-    constructor () {
-      this.data = []
-    }
-
-    get [Symbol.toStringTag] () {
-      return 'FormData'
-    }
-
-    append () {}
-    delete () {}
-    get () {}
-    getAll () {}
-    has () {}
-    set () {}
-    entries () {}
-    keys () {}
-    values () {}
-    forEach () {}
-  }
-
-  const form = new FormData()
-  t.equal(isFormDataLike(form), true)
-})
-
-test('arguments', (t) => {
-  t.equal(FormData.constructor.length, 1)
-  t.equal(FormData.prototype.append.length, 2)
-  t.equal(FormData.prototype.delete.length, 1)
-  t.equal(FormData.prototype.get.length, 1)
-  t.equal(FormData.prototype.getAll.length, 1)
-  t.equal(FormData.prototype.has.length, 1)
-  t.equal(FormData.prototype.set.length, 2)
-
-  t.end()
-})
-
-// https://github.com/nodejs/undici/pull/1814
-test('FormData returned from bodyMixin.formData is not a clone', async (t) => {
-  const fd = new FormData()
-  fd.set('foo', 'bar')
-
-  const res = new Response(fd)
-  fd.set('foo', 'foo')
-
-  const fd2 = await res.formData()
-
-  t.equal(fd2.get('foo'), 'bar')
-  t.equal(fd.get('foo'), 'foo')
-
-  fd2.set('foo', 'baz')
-
-  t.equal(fd2.get('foo'), 'baz')
-  t.equal(fd.get('foo'), 'foo')
 })

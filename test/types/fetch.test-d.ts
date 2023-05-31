@@ -1,15 +1,12 @@
 import { URL } from 'url'
 import { Blob } from 'buffer'
-import { ReadableStream } from 'stream/web'
-import { expectType, expectError, expectAssignable, expectNotAssignable } from 'tsd'
+import { expectType, expectError } from 'tsd'
 import {
-  Agent,
   BodyInit,
   fetch,
   FormData,
   Headers,
   HeadersInit,
-  SpecIterableIterator,
   Request,
   RequestCache,
   RequestCredentials,
@@ -25,12 +22,6 @@ import {
 
 const requestInit: RequestInit = {}
 const responseInit: ResponseInit = { status: 200, statusText: 'OK' }
-const requestInit2: RequestInit = {
-  dispatcher: new Agent()
-}
-const requestInit3: RequestInit = {}
-// Test assignment. See https://github.com/whatwg/fetch/issues/1445
-requestInit3.credentials = 'include'
 
 declare const request: Request
 declare const headers: Headers
@@ -107,28 +98,21 @@ expectType<Response>(new Response(new BigInt64Array(), responseInit))
 expectType<Response>(new Response(new BigUint64Array(), responseInit))
 expectType<Response>(new Response(new ArrayBuffer(0), responseInit))
 expectType<Response>(Response.error())
-expectType<Response>(Response.json({ a: 'b' }))
-expectType<Response>(Response.json({}, { status: 200 }))
-expectType<Response>(Response.json({}, { statusText: 'OK' }))
-expectType<Response>(Response.json({}, { headers: {} }))
-expectType<Response>(Response.json(null))
 expectType<Response>(Response.redirect('https://example.com', 301))
 expectType<Response>(Response.redirect('https://example.com', 302))
 expectType<Response>(Response.redirect('https://example.com', 303))
 expectType<Response>(Response.redirect('https://example.com', 307))
 expectType<Response>(Response.redirect('https://example.com', 308))
 expectError(Response.redirect('https://example.com', NaN))
-expectError(Response.json())
-expectError(Response.json(null, 3))
 
 expectType<void>(headers.append('key', 'value'))
 expectType<void>(headers.delete('key'))
 expectType<string | null>(headers.get('key'))
 expectType<boolean>(headers.has('key'))
 expectType<void>(headers.set('key', 'value'))
-expectType<SpecIterableIterator<string>>(headers.keys())
-expectType<SpecIterableIterator<string>>(headers.values())
-expectType<SpecIterableIterator<[string, string]>>(headers.entries())
+expectType<IterableIterator<string>>(headers.keys())
+expectType<IterableIterator<string>>(headers.values())
+expectType<IterableIterator<[string, string]>>(headers.entries())
 
 expectType<RequestCache>(request.cache)
 expectType<RequestCredentials>(request.credentials)
@@ -157,7 +141,6 @@ expectType<string>(response.statusText)
 expectType<ResponseType>(response.type)
 expectType<string>(response.url)
 expectType<boolean>(response.redirected)
-expectType<ReadableStream | null>(response.body)
 expectType<boolean>(response.bodyUsed)
 expectType<Promise<ArrayBuffer>>(response.arrayBuffer())
 expectType<Promise<Blob>>(response.blob())
@@ -165,9 +148,3 @@ expectType<Promise<FormData>>(response.formData())
 expectType<Promise<unknown>>(response.json())
 expectType<Promise<string>>(response.text())
 expectType<Response>(response.clone())
-
-expectType<Request>(new Request('https://example.com', { body: 'Hello, world', duplex: 'half' }))
-expectAssignable<RequestInit>({ duplex: 'half' })
-expectNotAssignable<RequestInit>({ duplex: 'not valid' })
-
-expectType<string[]>(headers.getSetCookie())

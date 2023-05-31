@@ -1,6 +1,7 @@
 const stream = require('stream')
 const http = require('http')
 
+const AbortController = require('abort-controller')
 const chai = require('chai')
 const { Blob } = require('buffer')
 
@@ -207,8 +208,7 @@ describe('Request', () => {
       follow: 3,
       compress: false,
       agent,
-      signal,
-      duplex: 'half'
+      signal
     })
     const cl = request.clone()
     expect(cl.url).to.equal(url)
@@ -226,56 +226,34 @@ describe('Request', () => {
 
   it('should support ArrayBuffer as body', () => {
     const encoder = new TextEncoder()
-    const body = encoder.encode('a=12345678901234').buffer
     const request = new Request(base, {
       method: 'POST',
-      body
+      body: encoder.encode('a=1').buffer
     })
-    new Uint8Array(body)[0] = 0
     return request.text().then(result => {
-      expect(result).to.equal('a=12345678901234')
+      expect(result).to.equal('a=1')
     })
   })
 
   it('should support Uint8Array as body', () => {
     const encoder = new TextEncoder()
-    const fullbuffer = encoder.encode('a=12345678901234').buffer
-    const body = new Uint8Array(fullbuffer, 2, 9)
     const request = new Request(base, {
       method: 'POST',
-      body
+      body: encoder.encode('a=1')
     })
-    body[0] = 0
     return request.text().then(result => {
-      expect(result).to.equal('123456789')
-    })
-  })
-
-  it('should support BigUint64Array as body', () => {
-    const encoder = new TextEncoder()
-    const fullbuffer = encoder.encode('a=12345678901234').buffer
-    const body = new BigUint64Array(fullbuffer, 8, 1)
-    const request = new Request(base, {
-      method: 'POST',
-      body
-    })
-    body[0] = 0n
-    return request.text().then(result => {
-      expect(result).to.equal('78901234')
+      expect(result).to.equal('a=1')
     })
   })
 
   it('should support DataView as body', () => {
     const encoder = new TextEncoder()
-    const fullbuffer = encoder.encode('a=12345678901234').buffer
-    const body = new Uint8Array(fullbuffer, 2, 9)
     const request = new Request(base, {
       method: 'POST',
-      body
+      body: new DataView(encoder.encode('a=1').buffer)
     })
-    body[0] = 0
     return request.text().then(result => {
-      expect(result).to.equal('123456789')
+      expect(result).to.equal('a=1')
     })
   })
 })

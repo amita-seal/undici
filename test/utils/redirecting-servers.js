@@ -178,75 +178,11 @@ async function startRedirectingWithAuthorization (t, authorization) {
   return [server1, server2]
 }
 
-async function startRedirectingWithCookie (t, cookie) {
-  const server1 = await startServer(t, (req, res) => {
-    if (req.headers.cookie !== cookie) {
-      res.statusCode = 403
-      res.setHeader('Connection', 'close')
-      res.end('')
-      return
-    }
-
-    res.statusCode = 301
-    res.setHeader('Connection', 'close')
-
-    res.setHeader('Location', `http://${server2}`)
-    res.end('')
-  })
-
-  const server2 = await startServer(t, (req, res) => {
-    res.end(req.headers.cookie || '')
-  })
-
-  return [server1, server2]
-}
-
-async function startRedirectingWithRelativePath (t) {
-  const server = await startServer(t, (req, res) => {
-    res.setHeader('Connection', 'close')
-
-    if (req.url === '/') {
-      res.statusCode = 301
-      res.setHeader('Location', '/absolute/a')
-      res.end('')
-    } else if (req.url === '/absolute/a') {
-      res.statusCode = 301
-      res.setHeader('Location', 'b')
-      res.end('')
-    } else {
-      res.statusCode = 200
-      res.end(req.url)
-    }
-  })
-
-  return server
-}
-
-async function startRedirectingWithQueryParams (t) {
-  const server = await startServer(t, (req, res) => {
-    if (req.url === '/?param1=first') {
-      res.statusCode = 301
-      res.setHeader('Connection', 'close')
-      res.setHeader('Location', `http://${server}/?param2=second`)
-      res.end('REDIRECT')
-      return
-    }
-
-    res.setHeader('Connection', 'close')
-    res.end('')
-  })
-
-  return server
-}
-
 module.exports = {
   startServer,
   startRedirectingServer,
   startRedirectingWithBodyServer,
   startRedirectingWithoutLocationServer,
   startRedirectingChainServers,
-  startRedirectingWithAuthorization,
-  startRedirectingWithCookie,
-  startRedirectingWithRelativePath,
-  startRedirectingWithQueryParams
+  startRedirectingWithAuthorization
 }

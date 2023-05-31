@@ -1,5 +1,3 @@
-/* globals AbortController */
-
 'use strict'
 
 const { test } = require('tap')
@@ -11,8 +9,8 @@ const { Readable } = require('stream')
 const net = require('net')
 const { promisify } = require('util')
 const { NotSupportedError } = require('../lib/core/errors')
-const { nodeMajor } = require('../lib/core/util')
-const { parseFormDataString } = require('./utils/formdata')
+
+const nodeMajor = Number(process.versions.node.split('.')[0])
 
 test('request dump', (t) => {
   t.plan(3)
@@ -39,61 +37,6 @@ test('request dump', (t) => {
         dumped = true
         t.pass()
       })
-    })
-  })
-})
-
-test('request dump with abort signal', (t) => {
-  t.plan(2)
-  const server = createServer((req, res) => {
-    res.write('hello')
-  })
-  t.teardown(server.close.bind(server))
-
-  server.listen(0, () => {
-    const client = new Client(`http://localhost:${server.address().port}`)
-    t.teardown(client.destroy.bind(client))
-
-    client.request({
-      path: '/',
-      method: 'GET'
-    }, (err, { body }) => {
-      t.error(err)
-      let ac
-      if (!global.AbortController) {
-        const { AbortController } = require('abort-controller')
-        ac = new AbortController()
-      } else {
-        ac = new AbortController()
-      }
-      body.dump({ signal: ac.signal }).catch((err) => {
-        t.equal(err.name, 'AbortError')
-        server.close()
-      })
-      ac.abort()
-    })
-  })
-})
-
-test('request hwm', (t) => {
-  t.plan(2)
-  const server = createServer((req, res) => {
-    res.write('hello')
-  })
-  t.teardown(server.close.bind(server))
-
-  server.listen(0, () => {
-    const client = new Client(`http://localhost:${server.address().port}`)
-    t.teardown(client.destroy.bind(client))
-
-    client.request({
-      path: '/',
-      method: 'GET',
-      highWaterMark: 1000
-    }, (err, { body }) => {
-      t.error(err)
-      t.same(body.readableHighWaterMark, 1000)
-      body.dump()
     })
   })
 })
@@ -611,12 +554,11 @@ test('request onInfo callback headers parsing', async (t) => {
   const client = new Client(`http://localhost:${server.address().port}`)
   t.teardown(client.close.bind(client))
 
-  const { body } = await client.request({
+  await client.request({
     path: '/',
     method: 'GET',
     onInfo: (x) => { infos.push(x) }
   })
-  await body.dump()
   t.equal(infos.length, 1)
   t.equal(infos[0].statusCode, 103)
   t.same(infos[0].headers, { link: '</style.css>; rel=preload; as=style' })
@@ -647,13 +589,12 @@ test('request raw responseHeaders', async (t) => {
   const client = new Client(`http://localhost:${server.address().port}`)
   t.teardown(client.close.bind(client))
 
-  const { body, headers } = await client.request({
+  const { headers } = await client.request({
     path: '/',
     method: 'GET',
     responseHeaders: 'raw',
     onInfo: (x) => { infos.push(x) }
   })
-  await body.dump()
   t.equal(infos.length, 1)
   t.same(infos[0].headers, ['Link', '</style.css>; rel=preload; as=style'])
   t.same(headers, ['Date', 'Sat, 09 Oct 2010 14:28:02 GMT', 'Connection', 'close'])
@@ -712,283 +653,5 @@ test('request text2', (t) => {
       t.equal(JSON.stringify(obj), ret)
     })
     t.strictSame(JSON.stringify(obj), await p)
-  })
-})
-
-test('request with FormData body', { skip: nodeMajor < 16 }, (t) => {
-  const { FormData } = require('../')
-  const { Blob } = require('buffer')
-
-  const fd = new FormData()
-  fd.set('key', 'value')
-  fd.set('file', new Blob(['Hello, world!']), 'hello_world.txt')
-
-  const server = createServer(async (req, res) => {
-    const contentType = req.headers['content-type']
-    // ensure we received a multipart/form-data header
-    t.ok(/^multipart\/form-data; boundary=-+formdata-undici-0.\d+$/.test(contentType))
-
-    const chunks = []
-
-    for await (const chunk of req) {
-      chunks.push(chunk)
-    }
-
-    const { fileMap, fields } = await parseFormDataString(
-      Buffer.concat(chunks),
-      contentType
-    )
-
-    t.same(fields[0], { key: 'key', value: 'value' })
-    t.ok(fileMap.has('file'))
-    t.equal(fileMap.get('file').data.toString(), 'Hello, world!')
-    t.same(fileMap.get('file').info, {
-      filename: 'hello_world.txt',
-      encoding: '7bit',
-      mimeType: 'application/octet-stream'
-    })
-
-    return res.end()
-  })
-  t.teardown(server.close.bind(server))
-
-  server.listen(0, async () => {
-    const client = new Client(`http://localhost:${server.address().port}`)
-    t.teardown(client.destroy.bind(client))
-
-    await client.request({
-      path: '/',
-      method: 'POST',
-      body: fd
-    })
-
-    t.end()
-  })
-})
-
-test('request with FormData body on node < 16', { skip: nodeMajor >= 16 }, async (t) => {
-  t.plan(1)
-
-  // a FormData polyfill, for example
-  class FormData {}
-
-  const fd = new FormData()
-
-  const client = new Client('http://localhost:3000')
-  t.teardown(client.destroy.bind(client))
-
-  await t.rejects(client.request({
-    path: '/',
-    method: 'POST',
-    body: fd
-  }), errors.InvalidArgumentError)
-})
-
-test('request post body Buffer from string', (t) => {
-  t.plan(2)
-  const requestBody = Buffer.from('abcdefghijklmnopqrstuvwxyz')
-
-  const server = createServer(async (req, res) => {
-    let ret = ''
-    for await (const chunk of req) {
-      ret += chunk
-    }
-    t.equal(ret, 'abcdefghijklmnopqrstuvwxyz')
-    res.end()
-  })
-  t.teardown(server.close.bind(server))
-
-  server.listen(0, async () => {
-    const client = new Client(`http://localhost:${server.address().port}`)
-    t.teardown(client.destroy.bind(client))
-
-    const { body } = await client.request({
-      path: '/',
-      method: 'POST',
-      body: requestBody,
-      maxRedirections: 2
-    })
-    await body.text()
-    t.pass()
-  })
-})
-
-test('request post body Buffer from buffer', (t) => {
-  t.plan(2)
-  const fullBuffer = new TextEncoder().encode('abcdefghijklmnopqrstuvwxyz')
-  const requestBody = Buffer.from(fullBuffer.buffer, 8, 16)
-
-  const server = createServer(async (req, res) => {
-    let ret = ''
-    for await (const chunk of req) {
-      ret += chunk
-    }
-    t.equal(ret, 'ijklmnopqrstuvwx')
-    res.end()
-  })
-  t.teardown(server.close.bind(server))
-
-  server.listen(0, async () => {
-    const client = new Client(`http://localhost:${server.address().port}`)
-    t.teardown(client.destroy.bind(client))
-
-    const { body } = await client.request({
-      path: '/',
-      method: 'POST',
-      body: requestBody,
-      maxRedirections: 2
-    })
-    await body.text()
-    t.pass()
-  })
-})
-
-test('request post body Uint8Array', (t) => {
-  t.plan(2)
-  const fullBuffer = new TextEncoder().encode('abcdefghijklmnopqrstuvwxyz')
-  const requestBody = new Uint8Array(fullBuffer.buffer, 8, 16)
-
-  const server = createServer(async (req, res) => {
-    let ret = ''
-    for await (const chunk of req) {
-      ret += chunk
-    }
-    t.equal(ret, 'ijklmnopqrstuvwx')
-    res.end()
-  })
-  t.teardown(server.close.bind(server))
-
-  server.listen(0, async () => {
-    const client = new Client(`http://localhost:${server.address().port}`)
-    t.teardown(client.destroy.bind(client))
-
-    const { body } = await client.request({
-      path: '/',
-      method: 'POST',
-      body: requestBody,
-      maxRedirections: 2
-    })
-    await body.text()
-    t.pass()
-  })
-})
-
-test('request post body Uint32Array', (t) => {
-  t.plan(2)
-  const fullBuffer = new TextEncoder().encode('abcdefghijklmnopqrstuvwxyz')
-  const requestBody = new Uint32Array(fullBuffer.buffer, 8, 4)
-
-  const server = createServer(async (req, res) => {
-    let ret = ''
-    for await (const chunk of req) {
-      ret += chunk
-    }
-    t.equal(ret, 'ijklmnopqrstuvwx')
-    res.end()
-  })
-  t.teardown(server.close.bind(server))
-
-  server.listen(0, async () => {
-    const client = new Client(`http://localhost:${server.address().port}`)
-    t.teardown(client.destroy.bind(client))
-
-    const { body } = await client.request({
-      path: '/',
-      method: 'POST',
-      body: requestBody,
-      maxRedirections: 2
-    })
-    await body.text()
-    t.pass()
-  })
-})
-
-test('request post body Float64Array', (t) => {
-  t.plan(2)
-  const fullBuffer = new TextEncoder().encode('abcdefghijklmnopqrstuvwxyz')
-  const requestBody = new Float64Array(fullBuffer.buffer, 8, 2)
-
-  const server = createServer(async (req, res) => {
-    let ret = ''
-    for await (const chunk of req) {
-      ret += chunk
-    }
-    t.equal(ret, 'ijklmnopqrstuvwx')
-    res.end()
-  })
-  t.teardown(server.close.bind(server))
-
-  server.listen(0, async () => {
-    const client = new Client(`http://localhost:${server.address().port}`)
-    t.teardown(client.destroy.bind(client))
-
-    const { body } = await client.request({
-      path: '/',
-      method: 'POST',
-      body: requestBody,
-      maxRedirections: 2
-    })
-    await body.text()
-    t.pass()
-  })
-})
-
-test('request post body BigUint64Array', (t) => {
-  t.plan(2)
-  const fullBuffer = new TextEncoder().encode('abcdefghijklmnopqrstuvwxyz')
-  const requestBody = new BigUint64Array(fullBuffer.buffer, 8, 2)
-
-  const server = createServer(async (req, res) => {
-    let ret = ''
-    for await (const chunk of req) {
-      ret += chunk
-    }
-    t.equal(ret, 'ijklmnopqrstuvwx')
-    res.end()
-  })
-  t.teardown(server.close.bind(server))
-
-  server.listen(0, async () => {
-    const client = new Client(`http://localhost:${server.address().port}`)
-    t.teardown(client.destroy.bind(client))
-
-    const { body } = await client.request({
-      path: '/',
-      method: 'POST',
-      body: requestBody,
-      maxRedirections: 2
-    })
-    await body.text()
-    t.pass()
-  })
-})
-
-test('request post body DataView', (t) => {
-  t.plan(2)
-  const fullBuffer = new TextEncoder().encode('abcdefghijklmnopqrstuvwxyz')
-  const requestBody = new DataView(fullBuffer.buffer, 8, 16)
-
-  const server = createServer(async (req, res) => {
-    let ret = ''
-    for await (const chunk of req) {
-      ret += chunk
-    }
-    t.equal(ret, 'ijklmnopqrstuvwx')
-    res.end()
-  })
-  t.teardown(server.close.bind(server))
-
-  server.listen(0, async () => {
-    const client = new Client(`http://localhost:${server.address().port}`)
-    t.teardown(client.destroy.bind(client))
-
-    const { body } = await client.request({
-      path: '/',
-      method: 'POST',
-      body: requestBody,
-      maxRedirections: 2
-    })
-    await body.text()
-    t.pass()
   })
 })
